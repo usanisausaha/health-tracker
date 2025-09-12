@@ -57,6 +57,13 @@ if APP_PASSCODE:
     if "_authed" not in st.session_state:
         st.session_state._authed = False
     if not st.session_state._authed:
+        # 👇 เพิ่ม CSS ให้มี margin-top
+        st.markdown("""
+        <style>
+        .block-container {padding-top: 5rem;}
+        </style>
+        """, unsafe_allow_html=True)
+
         st.title("🔒 เข้าสู่ระบบ")
         code = st.text_input("รหัสผ่าน", type="password")
         if st.button("เข้าใช้งาน"):
