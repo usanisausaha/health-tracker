@@ -111,7 +111,6 @@ def get_worksheet(client, title: str):
     return ws
 
 #%% CSV fallbacks (if not using Sheets)
-import os
 from pathlib import Path
 DATA_DIR = Path("data_store")
 DATA_DIR.mkdir(exist_ok=True)
