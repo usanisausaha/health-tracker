@@ -392,6 +392,39 @@ def calc_targets(profile: pd.Series) -> Dict[str, Any]:
     }
 
 
+def macro_bar(label, value, target, color):
+    progress = min(value / target, 1.0) if target > 0 else 0
+    st.markdown(f"""
+    <div style="margin-bottom:10px;">
+        <div style="font-weight:bold;">{label}: {value:.1f} / {target:.0f}</div>
+        <div style="background:#eee; border-radius:10px; height:18px;">
+            <div style="width:{progress*100:.1f}%;
+                        background:{color};
+                        height:18px;
+                        border-radius:10px;">
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+    # Today summary
+    df_food = load_food()
+    if not df_food.empty:
+        df_food["date"] = pd.to_datetime(df_food["date"]).dt.date
+        df_today = df_food[df_food["date"] == today]
+        st.markdown("### สรุปวันนี้")
+        if df_today.empty:
+            st.info("ยังไม่มีรายการอาหารวันนี้")
+        else:
+            totals = df_today[["calories","protein_g","carbs_g","fat_g"]].sum(numeric_only=True)
+            tg = calc_targets(load_profile())
+
+            st.markdown("### 🔋 Progress วันนี้")
+            macro_bar("พลังงาน (kcal)", totals["calories"], tg["target_kcal"], "#ff4d6d")
+            macro_bar("โปรตีน (g)", totals["protein_g"], tg["protein_g"], "#ff4d6d")
+            macro_bar("คาร์บ (g)", totals["carbs_g"], tg["carbs_g"], "#a0522d")
+
 #%% ==== APP UI ====
 
 st.title("🍎 Health Tracker (Private)")
