@@ -98,6 +98,11 @@ def get_clients():
 
 client, SHEET_NAME = get_clients()
 
+if client:
+    st.sidebar.success(f"✅ Connected to Google Sheet: {SHEET_NAME}")
+else:
+    st.sidebar.warning("⚠️ Using local CSV fallback (Google Sheet not connected)")
+
 #%% ==== SHEET HELPERS ====
 
 def get_worksheet(client, title: str):
@@ -145,19 +150,51 @@ def init_csv_if_needed():
 def load_profile() -> pd.Series:
     if client:
         ws = get_worksheet(client, PROFILE_SHEET)
-        data = ws.get_all_records()
-        if len(data) == 0:
-            # Create an empty row
-            ws.append_row(["หญิง", "2000-01-01", 159, 53, "", "นั่งทำงาน", "cut", -300, 1.8, 0.8])
-            data = ws.get_all_records()
-        return pd.Series(data[0])
+        values = ws.get_all_values()
+
+        # ถ้า worksheet ว่าง → ใส่ header + sample row
+        if not values:
+            ws.append_row(PROFILE_COLUMNS)  # set header
+            ws.append_row([
+                "หญิง", "2000-01-01", 159, 53, "", "นั่งทำงาน",
+                "cut", -300, 1.8, 0.8
+            ])
+            values = ws.get_all_values()
+
+        # ตอนนี้มี header แล้ว → แปลงเป็น DataFrame
+        df = pd.DataFrame(values[1:], columns=values[0])
+
+        # ถ้ายังไม่มี row → สร้าง default row
+        if df.empty:
+            new_row = pd.DataFrame([{
+                "gender": "หญิง",
+                "birthdate": "2000-01-01",
+                "height_cm": 159,
+                "weight_kg": 53,
+                "body_fat_percent": "",
+                "activity_level": "นั่งทำงาน",
+                "goal_type": "cut",
+                "goal_delta_kcal": -300,
+                "protein_g_per_kg": 1.8,
+                "fat_g_per_kg": 0.8,
+            }])
+            df = pd.concat([df, new_row], ignore_index=True)
+            ws.append_row(new_row.iloc[0].tolist())
+
+        return df.iloc[0]
+
     else:
+        # --- CSV fallback ---
         init_csv_if_needed()
         df = pd.read_csv(CSV_PROFILE)
         if df.empty:
-            df.loc[0, :] = ["หญิง", "2000-01-01", 159, 53, "", "นั่งทำงาน", "cut", -300, 1.8, 0.8]
+            df.loc[0, :] = [
+                "หญิง", "2000-01-01", 159, 53, "", "นั่งทำงาน",
+                "cut", -300, 1.8, 0.8
+            ]
             df.to_csv(CSV_PROFILE, index=False)
         return pd.read_csv(CSV_PROFILE).iloc[0]
+
 
 
 def save_profile(s: pd.Series):
