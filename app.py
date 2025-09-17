@@ -204,7 +204,6 @@ def append_food(row: Dict[str, Any]):
         df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
         df.to_csv(CSV_FOOD, index=False)
 
-
 def load_food() -> pd.DataFrame:
     if client:
         ws = get_worksheet(client, FOOD_SHEET)
@@ -214,18 +213,42 @@ def load_food() -> pd.DataFrame:
             ws.append_row(FOOD_COLUMNS)  # ถ้า sheet ว่าง → ใส่ header
             return pd.DataFrame(columns=FOOD_COLUMNS)
 
-        df = pd.DataFrame(values[1:], columns=values[0])
+        # Normalize header: lowercase + ตัดช่องว่าง
+        raw_headers = [c.strip().lower() for c in values[0]]
+        df = pd.DataFrame(values[1:], columns=raw_headers)
 
-        # บังคับให้มีคอลัมน์ครบตาม FOOD_COLUMNS
+        # map ให้ตรงกับ FOOD_COLUMNS
+        rename_map = {}
+        for col in FOOD_COLUMNS:
+            rename_map[col.lower()] = col
+        df = df.rename(columns=rename_map)
+
+        # เติมคอลัมน์ที่หายไป
+        for col in FOOD_COLUMNS:
+            if col not in df.columns:
+                df[col] = ""
+
+        # แปลงค่าตัวเลขให้เป็น float ถ้าได้
+        for col in ["calories","protein_g","carbs_g","fat_g"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+        return df[FOOD_COLUMNS]
+
+    else:
+        init_csv_if_needed()
+        df = pd.read_csv(CSV_FOOD)
+
+        # บังคับ normalize header ให้เหมือนกัน
+        rename_map = {c.lower(): c for c in FOOD_COLUMNS}
+        df = df.rename(columns=lambda x: x.strip().lower())
+        df = df.rename(columns=rename_map)
+
         for col in FOOD_COLUMNS:
             if col not in df.columns:
                 df[col] = ""
 
         return df[FOOD_COLUMNS]
 
-    else:
-        init_csv_if_needed()
-        return pd.read_csv(CSV_FOOD)
 
 def append_weight(row: Dict[str, Any]):
     if client:
