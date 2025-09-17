@@ -1,20 +1,3 @@
-# app.py — Streamlit Health Tracker (mobile-friendly)
-# -------------------------------------------------
-# Features
-# - Private login/passcode (optional)
-# - Profile with BMR/TDEE auto-calculation (Mifflin-St Jeor, or Katch-McArdle if body fat % provided)
-# - Daily food logging with macros
-# - Weight log
-# - Goals: maintain / cut / bulk with adjustable kcal
-# - Targets auto-suggested macros (protein g/kg, fat g/kg, carbs from remainder)
-# - Google Sheets backend (works on mobile). Local CSV fallback if credentials missing
-# - Mobile-friendly layout
-#
-# Deployment notes
-# - Add your Google Service Account JSON to Streamlit secrets as `gcp_service_account`
-# - Create a Google Sheet named e.g. "Health Tracker" with sheets: profile, food_log, weight_log (the app can auto-create)
-# - Share the Sheet with the service account email
-# - Optionally add `app_passcode` to Streamlit secrets to require a passcode
 
 from __future__ import annotations
 import streamlit as st
@@ -145,7 +128,7 @@ def init_csv_if_needed():
         pd.DataFrame(columns=WEIGHT_COLUMNS).to_csv(CSV_WEIGHT, index=False, encoding="utf-8")
 
 
-#%% ==== LOAD & SAVE LAYERS ====
+#%% ==== LOAD & SAVE LAYERS ==== 
 
 def load_profile() -> pd.Series:
     if client:
@@ -178,8 +161,8 @@ def load_profile() -> pd.Series:
                 "protein_g_per_kg": 1.8,
                 "fat_g_per_kg": 0.8,
             }])
-            df = pd.concat([df, new_row], ignore_index=True)
             ws.append_row(new_row.iloc[0].tolist())
+            df = pd.concat([df, new_row], ignore_index=True)
 
         return df.iloc[0]
 
@@ -196,18 +179,9 @@ def load_profile() -> pd.Series:
         return pd.read_csv(CSV_PROFILE).iloc[0]
 
 
-
 def save_profile(s: pd.Series):
     if client:
         ws = get_worksheet(client, PROFILE_SHEET)
-        # ensure header exists
-        if ws.row_count == 0 or ws.col_count < len(PROFILE_COLUMNS):
-            ws.resize(rows=2000, cols=max(26, len(PROFILE_COLUMNS)))
-        # Write header if empty
-        values = ws.get_all_values()
-        if not values:
-            ws.append_row(PROFILE_COLUMNS)
-        # Clear and write single row after header
         ws.clear()
         ws.append_row(PROFILE_COLUMNS)
         ws.append_row([s.get(c, "") for c in PROFILE_COLUMNS])
@@ -234,32 +208,75 @@ def append_food(row: Dict[str, Any]):
 def load_food() -> pd.DataFrame:
     if client:
         ws = get_worksheet(client, FOOD_SHEET)
-        data = ws.get_all_records()
-        return pd.DataFrame(data, columns=FOOD_COLUMNS)
+        values = ws.get_all_values()
+
+        if not values:
+            ws.append_row(FOOD_COLUMNS)  # ถ้า sheet ว่าง → ใส่ header
+            return pd.DataFrame(columns=FOOD_COLUMNS)
+
+        df = pd.DataFrame(values[1:], columns=values[0])
+
+        # บังคับให้มีคอลัมน์ครบตาม FOOD_COLUMNS
+        for col in FOOD_COLUMNS:
+            if col not in df.columns:
+                df[col] = ""
+
+        return df[FOOD_COLUMNS]
+
     else:
         init_csv_if_needed()
         return pd.read_csv(CSV_FOOD)
-
 
 def append_weight(row: Dict[str, Any]):
     if client:
         ws = get_worksheet(client, WEIGHT_SHEET)
         values = ws.get_all_values()
+
         if not values:
-            ws.append_row(WEIGHT_COLUMNS)
-        ws.append_row([row.get(c, "") for c in WEIGHT_COLUMNS])
+            ws.append_row(WEIGHT_COLUMNS)  # header
+            values = ws.get_all_values()
+
+        df = pd.DataFrame(values[1:], columns=values[0]) if len(values) > 1 else pd.DataFrame(columns=WEIGHT_COLUMNS)
+
+        # ถ้ามีวันที่นี้แล้ว → อัปเดตแทน
+        date_str = row.get("date", "")
+        if date_str in df["date"].astype(str).values:
+            idx = df.index[df["date"].astype(str) == date_str][0] + 2  # +2 เพราะ index เริ่มที่ 0 และมี header
+            ws.update(f"A{idx}:B{idx}", [[row["date"], row["weight_kg"]]])
+        else:
+            ws.append_row([row.get(c, "") for c in WEIGHT_COLUMNS])
+
     else:
         init_csv_if_needed()
         df = pd.read_csv(CSV_WEIGHT)
-        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+
+        date_str = row.get("date", "")
+        if date_str in df["date"].astype(str).values:
+            df.loc[df["date"].astype(str) == date_str, "weight_kg"] = row["weight_kg"]
+        else:
+            df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+
         df.to_csv(CSV_WEIGHT, index=False)
+
 
 
 def load_weight() -> pd.DataFrame:
     if client:
         ws = get_worksheet(client, WEIGHT_SHEET)
-        data = ws.get_all_records()
-        return pd.DataFrame(data, columns=WEIGHT_COLUMNS)
+        values = ws.get_all_values()
+
+        if not values:
+            ws.append_row(WEIGHT_COLUMNS)
+            return pd.DataFrame(columns=WEIGHT_COLUMNS)
+
+        df = pd.DataFrame(values[1:], columns=values[0])
+
+        for col in WEIGHT_COLUMNS:
+            if col not in df.columns:
+                df[col] = ""
+
+        return df[WEIGHT_COLUMNS]
+
     else:
         init_csv_if_needed()
         return pd.read_csv(CSV_WEIGHT)
